@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <title>FeatureTable without map</title>
+    <link rel="stylesheet" href="//js.arcgis.com/3.18/dijit/themes/claro/claro.css">
+    <link rel="stylesheet" href="//js.arcgis.com/3.18/esri/css/esri.css">
+    <style>
+        #controls {
+            position:absolute;
+            top:50px;
+            right:50px;
+            width:350px;
+            height:200px;
+            background-color:lightgray;
+            border-radius: 5px;
+            padding-top:10px;
+            padding-left:10px;
+        }
+    </style>
+
+    <!--<script type="text/javascript">
+      var dojoConfig = {
+        parseOnLoad: true,
+        isDebug: true,
+        packages: [
+          {
+            name: "esri",
+            location: "../esri"
+          }
+        ]
+      };
+    </script>-->
+
+    <script type="text/javascript">
+      var dojoConfig = {
+        parseOnLoad: true,
+        isDebug: true
+      };
+    </script>
+
+    <!--<script type="text/javascript" src="../../../../dojo/dojo.js"></script>-->
+    <script src="https://js.arcgis.com/3.18/"></script>
+
+    <style>
+        html, body, #map {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+    </style>
+
+    <script>
+      var map, loadTable, renderer, imageServiceUrl="http://idt-imagery.dc.esri.com/arcgis/rest/services/Haiti_Pan/ImageServer";
+      require([
+        "esri/layers/FeatureLayer",
+        "esri/dijit/FeatureTable",
+        "esri/renderers/SimpleRenderer",
+        "esri/geometry/webMercatorUtils",
+        "esri/geometry/Extent",
+        "esri/SpatialReference",
+        "esri/map",
+        "dojo/dom-construct",
+        "dojo/dom",
+        "dojo/query",
+        "dojo/parser",
+        "dojo/ready",
+        "dojo/on",
+        "dojo/_base/lang",
+        "dijit/registry",
+        "dijit/form/Button",
+        "dijit/layout/ContentPane",
+        "dijit/layout/BorderContainer",
+        "dijit/form/TextBox"
+      ], function(
+          FeatureLayer, FeatureTable, SimpleRenderer, webMercatorUtils, Extent, SpatialReference, Map,
+          domConstruct, dom, domQuery, parser, ready, on, lang,
+          registry, Button, ContentPane, BorderContainer, TextBox
+      ) {
+        parser.parse();
+        ready(function() {
+          var myFeatureLayer;
+          var initExtentSanDiego = new Extent(-13290258.981996676, 3718641.4877131623, -12727070.95759177, 4005433.217839005, new SpatialReference(3857));
+          //var initExtentPortland = new Extent(-14027111.93466566, 5424277.275227739, -12900735.88585536, 5901855.827953497, new SpatialReference(3857));
+          map = new Map("map", {
+            basemap: "topo"
+          });
+          map.setExtent(initExtentSanDiego);
+          on(domQuery("[data-btn-mode]"), 'click', function(evt) {
+            if (myFeatureLayer){
+              map.removeLayer(myFeatureLayer);
+            }
+            if (myFeatureTable) {
+              myFeatureTable.destroy();
+            }
+            loadTable(parseInt(evt.target.getAttribute('data-btn-mode')));
+          });
+          on(domQuery("[data-btn-renderer]"), 'click', function(evt) {
+            if (evt.target.getAttribute('data-btn-renderer') === "Custom") {
+              renderer = new SimpleRenderer({
+                type: "simple",
+                symbol: {
+                  type: "esriSFS",
+                  style: "esriSFSSolid",
+                  color: [255, 255, 0, 0],
+                  outline: {
+                    type: "esriSLS",
+                    style: "esriSLSSolid",
+                    color: [0, 0, 255, 255],
+                    width: 1
+                  }
+                },
+                label: "",
+                description: ""
+              });
+              myFeatureLayer.setRenderer(renderer);
+              myFeatureLayer.refresh();
+            }
+            else {
+              renderer = null;
+            }
+          });
+
+          loadTable = function(mode) {
+            mode = isNaN(mode) ? 0 : mode; //default to snapshot in this app
+            // Create the feature layer
+            myFeatureLayer = new FeatureLayer(imageServiceUrl, {
+              mode: mode,
+              visible: true,
+              outFields: [
+                "OBJECTID", "Name", "MinPS"
+              ],
+              queryPagination: true,
+              where:"category=1",
+              id: "fLayer"
+            });
+            if (renderer) {
+              myFeatureLayer.setRenderer(renderer);
+            }
+            //set map extent
+            on(myFeatureLayer, "load", function(evt) {
+              console.log("FEATURE LAYER LOAD EVT", evt);
+              var extent = myFeatureLayer.fullExtent;
+              if (webMercatorUtils.canProject(extent, map)) {
+                map.setExtent(webMercatorUtils.project(extent, map));
+              }
+              //else {
+              //  map.setExtent(initExtentSanDiego);
+              //}
+            });
+            map.addLayer(myFeatureLayer);
+            var tableNode = domConstruct.create('div', { id: 'myTableNode' }, dom.byId('bot'));
+            myFeatureTable = new FeatureTable({
+              "featureLayer": myFeatureLayer,
+              "outFields": [
+                "OBJECTID", "Name", "MinPS",
+              ],
+              fieldInfos: [
+                {
+                  name: 'OBJECTID',
+                  alias: 'OBJECTID',
+                },
+                {
+                  name: 'Name',
+                  alias: 'Common Name',
+                },
+                {
+                  name: 'MinPS',
+                  alias: 'Resolution',
+                }
+              ],
+              "map": map
+            }, tableNode);
+            myFeatureTable.startup();
+            on(myFeatureTable, "load", function(evt) {
+              console.log("The load event - ", evt);
+            });
+            myFeatureTable.on("show-statistics", function(evt) {
+              console.log("show-statistics avgfield - ", evt.statistics.avgField);
+              console.log("show-statistics countfield - ", evt.statistics.countField);
+              console.log("show-statistics maxfield - ", evt.statistics.maxField);
+              console.log("show-statistics minfield - ", evt.statistics.minField);
+              console.log("show-statistics stddevfield - ", evt.statistics.stddevField);
+              console.log("show-statistics sumfield - ", evt.statistics.sumField)
+            });
+            myFeatureTable.on("row-select", function(evt) {
+              console.log("select event - ", evt[0].data);
+            });
+            myFeatureTable.on("row-deselect", function(evt) {
+              console.log("deselect event - ", evt[0].data);
+            });
+            myFeatureTable.on("refresh", function(evt) {
+              console.log("refresh event - ", evt);
+            });
+            myFeatureTable.on("column-resize", function(evt) {
+              //triggered by ColumnResizer extension
+              console.log("column-resize event- ", evt);
+            });
+            myFeatureTable.on("column-state-change", function(evt) {
+              // triggered by ColumnHider extension
+              console.log("column-state-change event - ", evt);
+            });
+            myFeatureTable.on("sort", function(evt) {
+              console.log("sort event - ", evt);
+            });
+            myFeatureTable.on("filter", function(evt) {
+              console.log("filter event - ", evt);
+            });
+          }
+          //loadTable(1);
+          map.on("load", loadTable);
+        });
+      });
+      function changeUrl(val) {
+        imageServiceUrl = val;
+      }
+    </script>
+</head>
+
+<body class="claro esri">
+<div data-dojo-type="dijit/layout/BorderContainer" data-dojo-props="design:'headline'" style="width:100%; height:100%;">
+    <div data-dojo-type="dijit/layout/ContentPane" data-dojo-props="region:'center', splitter:true" style="height:50%">
+        <div id="map">
+        </div>
+        <div id="controls">
+            <h3>Test Panel</h3>
+            <div>
+                service (click mode again)
+                <select onchange="changeUrl(this.value)">
+                    <option value="http://wju:6080/arcgis/rest/services/demo/SanDiego/ImageServer">SanDiego105</option>
+                    <option value="http://sampleserver3.arcgisonline.com/ArcGIS/rest/services/Portland/Aerial/ImageServer">Portland10_Sampleserver3</option>
+                    <option value="http://sampleserver6.arcgisonline.com/arcgis/rest/services/NLCDLandCover2001/ImageServer">NLCD_Sampleserver6</option>
+                </select>
+            </div>
+            <br />
+            <div>
+                mode:
+                <button data-btn-mode="0">SnapShot</button>
+                <button data-btn-mode="1">OnDemand</button>
+                <button data-btn-mode="6">Auto</button>
+            </div>
+            <br />
+            <div>
+                renderer:
+                <button data-btn-renderer="default">Default-click mode again</button>
+                <button data-btn-renderer="Custom">Custom</button>
+            </div>
+            <br />
+        </div>
+    </div>
+    <div id="bot" data-dojo-type="dijit/layout/ContentPane" data-dojo-props="region:'bottom', splitter:true" style="height:50%">
+        <!--<div id="myTableNode"></div>-->
+    </div>
+</div>
+</body>
+</html>
